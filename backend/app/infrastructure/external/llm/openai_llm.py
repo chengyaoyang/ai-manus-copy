@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class OpenAILLM(LLM):
-    def __init__(self):
+    def __init__(self, compression_service=None):
         settings = get_settings()
         self.client = AsyncOpenAI(
             api_key=settings.api_key,
@@ -18,6 +18,7 @@ class OpenAILLM(LLM):
         self._model_name = settings.model_name
         self._temperature = settings.temperature
         self._max_tokens = settings.max_tokens
+        self._compression_service = compression_service
         logger.info(f"Initialized OpenAI LLM with model: {self._model_name}")
     
     @property
@@ -59,5 +60,27 @@ class OpenAILLM(LLM):
                 )
             return response.choices[0].message.model_dump()
         except Exception as e:
+            # Added: Check if token limit error and has compression service
+            if self._compression_service and self._is_token_limit_error(e):
+                logger.warning(f"Token limit exceeded, attempting compression")
+                compressed_messages = await self._compression_service.handle_token_overflow(
+                    messages, str(e)
+                )
+                # Recursive retry (compression service controls max retry count)
+                logger.info("Retrying with compressed messages")
+                return await self.ask(compressed_messages, tools, response_format)
+            
             logger.error(f"Error calling OpenAI API: {str(e)}")
             raise
+    
+    def _is_token_limit_error(self, error: Exception) -> bool:
+        """Check if error is token limit exceeded"""
+        error_msg = str(error).lower()
+        token_error_keywords = [
+            'context_length_exceeded', 
+            'token limit', 
+            'maximum context length',
+            'request too large',
+            'too many tokens'
+        ]
+        return any(keyword in error_msg for keyword in token_error_keywords)

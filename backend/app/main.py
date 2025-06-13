@@ -20,6 +20,9 @@ from app.infrastructure.external.task.redis_task import RedisStreamTask
 from app.interfaces.api.routes import get_agent_service
 from app.infrastructure.models.documents import AgentDocument, SessionDocument
 from app.infrastructure.utils.llm_json_parser import LLMJsonParser
+from app.infrastructure.external.compression.llm_compression_engine import LlmCompressionEngine
+from app.infrastructure.external.compression.token_error_analyzer import TokenErrorAnalyzer
+from app.infrastructure.services.compression_service import CompressionService
 from beanie import init_beanie
 
 # Initialize logging system
@@ -42,13 +45,31 @@ def create_agent_service() -> AgentService:
     else:
         logger.warning("Google Search Engine not initialized: missing API key or engine ID")
 
+    # Initialize compression service components
+    json_parser = LLMJsonParser()
+    
+    # Create temporary LLM instance for compression (to avoid circular dependency)
+    compression_llm = OpenAILLM()
+    compression_engine = LlmCompressionEngine(compression_llm, json_parser)
+    token_analyzer = TokenErrorAnalyzer()
+    compression_service = CompressionService(
+        compression_engine=compression_engine,
+        token_analyzer=token_analyzer,
+        json_parser=json_parser
+    )
+    
+    # Create main LLM instance with compression service
+    main_llm = OpenAILLM(compression_service=compression_service)
+    
+    logger.info("Compression service initialized successfully")
+
     return AgentService(
-        llm=OpenAILLM(),
+        llm=main_llm,
         agent_repository=MongoAgentRepository(),
         session_repository=MongoSessionRepository(),
         sandbox_cls=DockerSandbox,
         task_cls=RedisStreamTask,
-        json_parser=LLMJsonParser(),
+        json_parser=json_parser,
         search_engine=search_engine,
     )
 

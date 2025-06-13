@@ -118,3 +118,17 @@ coverage/
 .vite/
 docker-compose-test.yml
 *.code-workspace
+
+# temp
+backend/app copy/
+backend/COMPRESSION_FIX_COMMIT_MESSAGE.txt
+build.sh
+dev.sh
+开发规范.md
+docker-compose-deepseek.yml
+docker-compose-zhipu.yml
+docker-compose.yml
+docker-compose-example.yml
+docker-compose-development.yml
+.env.example
+prompt.txt
